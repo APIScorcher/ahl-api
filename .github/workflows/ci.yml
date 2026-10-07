@@ -1,0 +1,38 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.10', '3.12', '3.14']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install '.[research,dev]'
+      - run: python -m ruff check ahl_api tests examples
+      - run: python -m pytest --cov=ahl_api --cov-report=term
+      - run: python -m pip check
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install build twine
+      - run: python -m build
+      - run: python -m twine check dist/*
+      - run: python -m pip install dist/*.whl
+      - run: python -c "from ahl_api import AHL; import sys; assert 'pandas' not in sys.modules; print(AHL().describe())"
+      - run: ahl --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
