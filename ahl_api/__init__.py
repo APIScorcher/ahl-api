@@ -17,7 +17,13 @@ from ahl_api.client import (
     read_dotenv,
 )
 
-__version__ = "0.3.0"
+from ahl_api.exchange import Exchange, ahl, BadSymbol
+
+ExchangeError = AhlError
+NetworkError = TransportError
+InvalidOrder = RiskCheckError
+
+__version__ = "0.4.0"
 
 _OPTIONAL_EXPORTS = {
     "BacktestConfig": "ahl_api.backtest",
@@ -72,6 +78,12 @@ _OPTIONAL_EXPORTS = {
     "rsi": "ahl_api.research_strategies",
 }
 __all__ = [
+    "ahl",
+    "Exchange",
+    "BadSymbol",
+    "ExchangeError",
+    "NetworkError",
+    "InvalidOrder",
     "AHL",
     "AhlClient",
     "AhlError",

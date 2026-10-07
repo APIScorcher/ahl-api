@@ -81,7 +81,7 @@ order = ahl.create_order("HBL", "buy", 1, price=298.0, order_type="limit")
 
 - `fetch_ohlcv()` uses AHL/NxG Tick intraday chart data.
 - `fetch_historical_ohlcv()` uses PSX Data Portal end-of-day data for multi-year history.
-- PSX EOD rows include timestamp, open, close, and volume. High/low are not present, so the CCXT-style rows use `None` for high and low:
+- PSX EOD rows include timestamp, open, close, and volume. High/low are not present, so the six-field OHLCV rows use `None` for high and low:
 
 ```python
 rows = ahl.fetch_historical_ohlcv("OGDC", years=5)

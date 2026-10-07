@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -92,7 +93,7 @@ def _clean_base_url(base_url: str) -> str:
 
 
 class AHL:
-    """Small CCXT-style interface for AHL NxG Tick.
+    """Core interface for AHL NxG Tick.
 
     The client defaults to dry-run trading. Construct it with ``dry_run=False``
     to submit live order/cancel requests with the mapped Android HTTP endpoints.
@@ -100,7 +101,7 @@ class AHL:
 
     id = "ahl"
     name = "Arif Habib Limited NxG Tick"
-    version = "0.3.0"
+    version = "0.4.0"
     has = {
         "fetch_accounts": True,
         "fetch_balance": True,
@@ -139,8 +140,13 @@ class AHL:
         audit_dir: str | Path = DEFAULT_AUDIT_DIR,
         session_state_path: str | Path = DEFAULT_SESSION_STATE_PATH,
         audit_enabled: bool = False,
+        rate_limit_ms: float = 0,
     ) -> None:
         config = config or {}
+        if not math.isfinite(rate_limit_ms) or not 0 <= rate_limit_ms <= 60_000:
+            raise ValueError("rate_limit_ms must be between 0 and 60000")
+        self.rate_limit_ms = rate_limit_ms
+        self._last_request_started: float | None = None
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be positive and finite")
         if max_order_value is not None and (not math.isfinite(max_order_value) or max_order_value <= 0):
@@ -212,6 +218,11 @@ class AHL:
         url = raw_url or f"{base_url or self.base_url}{(endpoint or '').lstrip('/')}"
         request_record = {"url": url, "params": params or {}, "endpoint": endpoint}
         try:
+            if self.rate_limit_ms and self._last_request_started is not None:
+                delay = self.rate_limit_ms / 1000 - (time.monotonic() - self._last_request_started)
+                if delay > 0:
+                    time.sleep(delay)
+            self._last_request_started = time.monotonic()
             response = self.http.get(
                 url,
                 params=None if raw_url else params or {},
@@ -488,7 +499,9 @@ class AHL:
         )
         data = _loads_json(text)
         if not isinstance(data, dict):
-            return {symbol.upper(): {"symbol": symbol.upper(), "market": market.upper(), "raw": text} for symbol in symbols}
+            return {
+                symbol.upper(): {"symbol": symbol.upper(), "market": market.upper(), "raw": text} for symbol in symbols
+            }
         entries = _parse_feed_entries(str(data.get("feedString", "")))
         return {str(entry.get("symbol", "")).upper(): {**entry, "raw": text} for entry in entries}
 
@@ -657,7 +670,9 @@ class AHL:
         order_id_text = str(order_id)
         matches = []
         for logname in ("outstanding", "trade", "activity"):
-            matches.extend(order for order in self.fetch_order_logs(logname) if str(order.get("id", "")) == order_id_text)
+            matches.extend(
+                order for order in self.fetch_order_logs(logname) if str(order.get("id", "")) == order_id_text
+            )
         if matches:
             primary = dict(matches[0])
             primary["events"] = [dict(match) for match in matches]
@@ -786,6 +801,10 @@ class AHL:
         exchange: str = "KSE",
         order_no: int | None = None,
     ) -> dict[str, Any]:
+        if not self.dry_run and not self._resolve_pin(pin):
+            raise AuthenticationError(
+                "A trading PIN is required for live orders; configure pin or supply a per-call PIN."
+            )
         request = self._build_order_request(
             symbol=symbol,
             side=side,
@@ -813,11 +832,15 @@ class AHL:
         self._audit("create_order_result", request=request["private"], response=text, parsed=result)
         return result
 
-    def build_cancel_order_request(self, order_id: str, *, pin: str = "", order_no: int | None = None) -> dict[str, Any]:
+    def build_cancel_order_request(
+        self, order_id: str, *, pin: str = "", order_no: int | None = None
+    ) -> dict[str, Any]:
         request = self._build_cancel_order_request(order_id, pin=pin, order_no=order_no)
         return request["public"]
 
     def cancel_order(self, order_id: str, *, pin: str = "", order_no: int | None = None) -> dict[str, Any]:
+        if not self.dry_run and not self._resolve_pin(pin):
+            raise AuthenticationError("A trading PIN is required for live cancellations.")
         request = self._build_cancel_order_request(order_id, pin=pin, order_no=order_no)
         if self.dry_run:
             result = _normalize_cancel_result(order_id, "", dry_run=True, status="dry_run")
@@ -935,7 +958,11 @@ class AHL:
             raise RiskCheckError("Limit and stop-loss orders require a positive price.")
         if order["type"] == "market" and not self.allow_market_orders:
             raise RiskCheckError("Market orders are disabled for this client.")
-        if order["side"] == "sell" and str(order.get("broker_side", "")).upper() == "SHORT SELL" and not self.allow_short_sell:
+        if (
+            order["side"] == "sell"
+            and str(order.get("broker_side", "")).upper() == "SHORT SELL"
+            and not self.allow_short_sell
+        ):
             raise RiskCheckError("Short selling is disabled for this client.")
         if self.allowed_symbols is not None and symbol not in self.allowed_symbols:
             raise RiskCheckError(f"{symbol} is not in allowed_symbols.")
@@ -978,7 +1005,9 @@ class AHL:
         if upper is not None and price > upper:
             raise RiskCheckError(f"Price {price} is above upper cap {upper}.")
 
-    def _check_buying_power(self, amount: int, price: float, *, account: str | None = None, market: str = "REG") -> None:
+    def _check_buying_power(
+        self, amount: int, price: float, *, account: str | None = None, market: str = "REG"
+    ) -> None:
         if market not in {"REG", "FUT"}:
             raise RiskCheckError("Buying-power checks are supported for REG and FUT only.")
         buying_power = self.fetch_buying_power(account=account).get("future" if market == "FUT" else "regular")
@@ -1001,7 +1030,7 @@ class AHL:
         return None
 
     def _resolve_pin(self, pin: str | None) -> str:
-        return str(pin if pin not in (None, "") else self.pin)
+        return str(pin if pin not in (None, "") else self.pin).strip()
 
     def _looks_session_expired(self, text: str) -> bool:
         lowered = text.lower()
@@ -1103,7 +1132,15 @@ def _parse_portfolio(text: str) -> dict[str, Any]:
             continue
         if chunk.startswith("$"):
             fields = chunk[1:].split(";")
-            names = ("cash", "market_value", "day_pnl", "unrealized_pnl", "day_pnl_percent", "unrealized_pnl_percent", "cost_basis")
+            names = (
+                "cash",
+                "market_value",
+                "day_pnl",
+                "unrealized_pnl",
+                "day_pnl_percent",
+                "unrealized_pnl_percent",
+                "cost_basis",
+            )
             summary = {name: _safe_float(fields[i]) for i, name in enumerate(names) if i < len(fields)}
             if summary.get("cash") is not None and summary.get("market_value") is not None:
                 summary["net_worth"] = summary["cash"] + summary["market_value"]
@@ -1113,19 +1150,26 @@ def _parse_portfolio(text: str) -> dict[str, Any]:
             raise AhlError("Unrecognized portfolio response; expected holding rows and a summary.")
         quantity = _safe_int(fields[2])
         last = _safe_float(fields[4])
-        positions.append({
-            "symbol": fields[0], "approval_status": fields[1], "quantity": quantity,
-            "average_cost": _safe_float(fields[3]), "last": last,
-            "cost_basis": _safe_float(fields[5]), "day_pnl": _safe_float(fields[7]),
-            "unrealized_pnl": _safe_float(fields[8]), "unrealized_pnl_percent": _safe_float(fields[10]),
-            "market": fields[15],
-            "market_value": quantity * last if quantity is not None and last is not None else None,
-        })
+        positions.append(
+            {
+                "symbol": fields[0],
+                "approval_status": fields[1],
+                "quantity": quantity,
+                "average_cost": _safe_float(fields[3]),
+                "last": last,
+                "cost_basis": _safe_float(fields[5]),
+                "day_pnl": _safe_float(fields[7]),
+                "unrealized_pnl": _safe_float(fields[8]),
+                "unrealized_pnl_percent": _safe_float(fields[10]),
+                "market": fields[15],
+                "market_value": quantity * last if quantity is not None and last is not None else None,
+            }
+        )
     return {"positions": positions, "summary": summary}
 
 
 def _javaish_date() -> str:
-    return datetime.now().strftime("%a %b %d %H:%M:%S GMT+05:00 %Y")
+    return datetime.now(timezone(timedelta(hours=5))).strftime("%a %b %d %H:%M:%S GMT+05:00 %Y")
 
 
 def _q(value: Any) -> str:
@@ -1542,7 +1586,9 @@ def _parse_exposure_by_market(text: str) -> dict[str, dict[str, Any]]:
     return markets
 
 
-def _normalize_order_result(order: dict[str, Any], text: str, *, dry_run: bool, status: str | None = None) -> dict[str, Any]:
+def _normalize_order_result(
+    order: dict[str, Any], text: str, *, dry_run: bool, status: str | None = None
+) -> dict[str, Any]:
     status = status or _infer_order_status(text)
     return {
         "id": _extract_order_id(text),

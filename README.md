@@ -22,22 +22,33 @@ pip install "ahl-api[research] @ git+https://github.com/APIScorcher/ahl-api.git"
 
 The package builds as a wheel and source distribution. It has not been published to PyPI; `pip install ahl-api` is not the installation command for this release.
 
-## Retrieve your portfolio
+## Exchange interface
 
-Set `AHL_USERNAME` and `AHL_PASSWORD` in your environment, then:
+Set `AHL_USERNAME`, `AHL_PASSWORD`, and optionally `AHL_PIN` in your environment:
 
 ```python
 import os
-from ahl_api import AHL
+import ahl_api
 
-with AHL({"user": os.environ["AHL_USERNAME"], "pass": os.environ["AHL_PASSWORD"]}) as client:
-    portfolio = client.fetch_portfolio()
-    print(portfolio["positions"])
-    print(portfolio["summary"])
-    print(client.fetch_balance())
+with ahl_api.ahl({
+    "username": os.environ["AHL_USERNAME"],
+    "password": os.environ["AHL_PASSWORD"],
+    "pin": os.environ.get("AHL_PIN"),
+    "enableRateLimit": True,
+    "options": {"dryRun": True, "maxOrderValue": 50_000},
+}) as exchange:
+    exchange.load_markets()
+    ticker = exchange.fetch_ticker("OGDC/PKR")
+    balance = exchange.fetch_balance()
+    preview = exchange.create_order("OGDC/PKR", "limit", "buy", 1, 300)
+    assert preview["dry_run"]
 ```
 
-Each position includes symbol, quantity, average cost, last price, market value, unrealized P/L, and market. The summary includes cash, holdings value, cost basis, P/L, and net worth. Monetary account fields are in PKR. Raw broker responses remain available for troubleshooting.
+`ahl_api.ahl` (also `Exchange`) provides standard exchange method signatures, `params`, `load_markets`, symbols, capability flags, rate limiting, normalized balances/tickers/orders, and camelCase aliases. It is a standalone SDK; it is not a registered CCXT exchange or a subclass of `ccxt.Exchange`. See [the unified facade guide](docs/exchange.md).
+
+The existing `AHL`/`AhlClient` protocol interface remains compatible and is available as `exchange.client`. `fetch_portfolio()` returns position quantities, average costs, latest prices, market values, unrealized P/L, and a PKR summary. Unified `fetch_balance()` expresses cash in PKR and equities in shares; unknown settled/free/blocked amounts remain `None`.
+
+**PIN:** configure `pin` as a string to preserve leading zeros, or supply `params={"pin": "YOUR_TRADING_PIN"}` on an individual order/cancellation. Live trading requires a PIN and rejects missing values before making a request. Read-only portfolio/balance queries do not require it. PINs are kept in memory, redacted in SDK previews/logs, and not stored in session state. Never commit a real PIN.
 
 The authenticated account API is known to stop returning useful data after market close. It may return zero balances and an empty portfolio even when holdings exist. **Do not interpret these responses as liquidation or use them to generate trades.** Run account validation during market hours. This SDK does not invent a trading calendar or substitute a stale snapshot for live data.
 
@@ -55,9 +66,11 @@ Alternatively, keep credentials in a local `.env` file using the placeholders in
 
 ## Trading defaults
 
-`dry_run=True` is the default. `create_order()` and `cancel_order()` return redacted request previews without submitting orders. Market orders and short selling require explicit enablement. Price bands and buying power are checked for live orders; unavailable risk data blocks submission.
+`options.dryRun=True` on the facade and `dry_run=True` on `AHL` are the defaults. `create_order()` and `cancel_order()` return redacted request previews without submitting orders. Market orders and short selling require explicit enablement. Price bands and buying power are checked for live orders; unavailable risk data blocks submission.
 
 ```python
+from ahl_api import AHL
+
 with AHL({"user": "YOUR_USERNAME", "pass": "YOUR_PASSWORD"}, max_order_value=50_000, max_order_quantity=500) as client:
     preview = client.create_order("OGDC", "buy", 1, price=300)
     assert preview["dry_run"]
@@ -89,7 +102,7 @@ python -m build
 python -m twine check dist/*
 ```
 
-Tests use synthetic account fixtures and mocked HTTP. CI runs on Windows and Linux across Python 3.10, 3.12, and 3.14 and builds installable artifacts. The core client depends only on requests; research dependencies load lazily.
+Tests use synthetic account fixtures and mocked HTTP. CI runs on Windows and Linux across Python 3.10, 3.12, and 3.14 and builds installable artifacts. The core client and unified facade depend only on requests; research dependencies load lazily.
 
 ## Privacy and license
 

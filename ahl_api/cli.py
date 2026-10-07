@@ -24,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     config = {
         "user": os.environ.get("AHL_USERNAME") or env.get("user"),
         "pass": os.environ.get("AHL_PASSWORD") or env.get("pass"),
+        "pin": os.environ.get("AHL_PIN") or env.get("pin"),
     }
     try:
         with AHL(config, base_url=args.base_url) as client:

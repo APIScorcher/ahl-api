@@ -35,7 +35,7 @@ def seeded_client(**kwargs) -> AHL:
     kwargs.setdefault("check_buying_power", False)
     kwargs.setdefault("check_price_bands", False)
     client = AHL(
-        {"user": "U", "pass": "P"},
+        {"user": "U", "pass": "P", "pin": "DEMO_PIN"},
         **kwargs,
     )
     client.session = AhlSession(
@@ -135,9 +135,7 @@ class ParserTests(unittest.TestCase):
     def test_fetch_historical_ohlcv_parses_psx_eod_rows(self) -> None:
         client = seeded_client()
         fake_http = FakeHTTP(
-            [
-                '{"status":1,"message":"","data":[[1781866800,331.28,9526189,339],[1624446490,99.2,10269396,99.11]]}'
-            ]
+            ['{"status":1,"message":"","data":[[1781866800,331.28,9526189,339],[1624446490,99.2,10269396,99.11]]}']
         )
         client.http = fake_http
         candles = client.fetch_historical_ohlcv("OGDC", since="2021-01-01", until="2026-12-31")

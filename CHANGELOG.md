@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — 2026-10-07
+
+- Add a standalone `ahl`/`Exchange` facade with markets, unified symbols, standard signatures/params, normalized responses, aliases, and paced requests.
+- Preserve the `AHL` core interface and make live trading PIN checks fail before HTTP requests.
+- Support `AHL_PIN`, per-call PIN overrides, leading-zero PINs, and statement PIN fallback.
+- Keep unknown free balances, fill states, fees, and timestamps unset; declare unsupported capabilities explicitly.
+- Interpret broker request dates and intraday/session timestamps in Pakistan time.
+
 ## 0.3.0 — 2026-10-07
 
 - Add installable wheel/sdist metadata, optional research dependencies, read-only CLI, documentation, and CI.

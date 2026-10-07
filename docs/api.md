@@ -1,8 +1,10 @@
-# API reference
+# Core API reference
+
+For the new `ahl_api.ahl` / `Exchange` facade, see [exchange interface](exchange.md). Core signatures remain unchanged.
 
 ## Client lifecycle
 
-`AHL(config=None, *, base_url=..., timeout=30, dry_run=True, audit_enabled=False, ...)` accepts `user`/`pass` or `username`/`password`. Optional trading PIN keys: `pin`, `PIN`, `trade_pin`, or `TRADING_PIN`. Use a context manager or call `close()` to release HTTP resources. A client is synchronous and intended for one account and one execution thread. Separate processes must not share an order-counter file.
+`AHL(config=None, *, base_url=..., timeout=30, dry_run=True, audit_enabled=False, ...)` accepts `user`/`pass` or `username`/`password`. PIN is required for live orders/cancellations. Supported trading PIN keys: `pin`, `PIN`, `trade_pin`, or `TRADING_PIN`. Use a context manager or call `close()` to release HTTP resources. A client is synchronous and intended for one account and one execution thread. Separate processes must not share an order-counter file.
 
 `login()` authenticates, checks required fields, and persists an account-scoped order counter locally. `ensure_session()` logs in on first authenticated use. A failed login clears the previous session. `read_dotenv(Path(...))` reads simple key/value files; it is not a complete dotenv interpolation parser.
 

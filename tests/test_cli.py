@@ -42,7 +42,8 @@ def test_ticker_uses_environment_credentials(monkeypatch):
     with patch("ahl_api.cli.AHL") as factory, redirect_stdout(io.StringIO()):
         factory.return_value.__enter__.return_value.fetch_ticker.return_value = {"last": 100}
         assert main(["ticker", "DEMO"]) == 0
-        assert factory.call_args.args[0] == {"user": "DEMO_USER", "pass": "DEMO_PASSWORD"}
+        assert factory.call_args.args[0]["user"] == "DEMO_USER"
+        assert factory.call_args.args[0]["pass"] == "DEMO_PASSWORD"
         factory.return_value.__enter__.return_value.fetch_ticker.assert_called_once_with("DEMO")
 
 

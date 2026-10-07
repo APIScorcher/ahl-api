@@ -1,11 +1,11 @@
-# Release validation — 0.3.0
+# Release validation — 0.4.0
 
 Validated on 7 October 2026 with Python 3.14 on Windows. Evidence distinguishes deterministic offline tests from calls to external services. It does not claim that every broker feature works at every time of day.
 
 ## Offline checks
 
-- **124 tests passed**, plus four subtests. Tests block real HTTP requests.
-- **86.9% total statement coverage**. Coverage measures executed code, not the correctness of all possible broker responses.
+- **147 tests passed**, plus four subtests. Tests block real HTTP requests.
+- **87.3% total statement coverage**. Coverage measures executed code, not the correctness of all possible broker responses.
 - Lint passes for SDK, tests, and examples.
 - Wheel and source distribution build; Twine metadata checks pass.
 - Wheel installs in an isolated environment with only requests and its dependencies; core import and CLI work without pandas.
@@ -14,15 +14,18 @@ Validated on 7 October 2026 with Python 3.14 on Windows. Evidence distinguishes 
 
 | Module | Statement coverage |
 |---|---:|
-| `__init__.py` | 76.5% |
+| `__init__.py` | 81.0% |
 | `backtest.py` | 89.4% |
 | `cli.py` | 100.0% |
-| `client.py` | 87.2% |
+| `client.py` | 88.0% |
 | `datasets.py` | 91.4% |
+| `exchange.py` | 88.8% |
 | `research.py` | 84.8% |
 | `research_reporting.py` | 85.1% |
 | `research_strategies.py` | 81.0% |
 | `strategies.py` | 91.2% |
+
+Facade/PIN tests cover configuration units, market caching, symbols, precision, quote and balance normalization, dated candles, CCXT order argument order, log filtering, per-call PIN routing/redaction, leading zeros, missing-PIN rejection before HTTP, rate limiting, and explicit unsupported parameters.
 
 Regression coverage includes authentication failure and stale-session clearing; refreshed tokens; bounded read retries; no mutation replay; credential-redacted logging and transport errors; integer shares; finite prices; symbol/value/quantity restrictions; missing risk data; price bands; market/stop order value guards; unknown order replies; cancellation replies; date filters; portfolio reconciliation; UTC historical dates; CLI failures; lazy exports; next-open execution; settlement; fees; recurring contributions; walk-forward selection; dataset checksums; indicator strategies; and report generation.
 
